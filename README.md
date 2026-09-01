@@ -99,6 +99,11 @@ docker-compose.yml 一键编排
 - **中文 PDF 乱码**:样例 PDF 由 reportlab 生成,需系统含中文字体(Windows 自带微软雅黑;Linux 容器请安装 wqy 字体)。
 - **重排默认关闭**:`FlagEmbedding` 为可选依赖,启用 `RERANK_ENABLED=true` 时需自行安装。
 
+## 帮助文档
+
+- 快速上手(小白版): `docs/PROJECT_GUIDE_PART1_QUICKSTART.md`
+- 面试项目解析: `docs/PROJECT_GUIDE_PART2_INTERVIEW.md`
+
 ## 设计文档
 
 - 设计: `docs/superpowers/specs/2026-09-01-enterprise-rag-agent-design.md`
