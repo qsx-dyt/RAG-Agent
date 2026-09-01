@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import documents, conversations, chat
+from app.api import documents, conversations, chat, health
 from app.core.db import init_db
 from app.core.milvus import get_milvus_client
 
@@ -11,6 +11,7 @@ def create_app() -> FastAPI:
     app.include_router(documents.router)
     app.include_router(conversations.router)
     app.include_router(chat.router)
+    app.include_router(health.router)
 
     @app.on_event("startup")
     def startup():
