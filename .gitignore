@@ -9,3 +9,4 @@ dist/
 .vscode/
 .pytest_cache/
 *.egg-info/
+backend/storage/
