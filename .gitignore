@@ -7,3 +7,5 @@ dist/
 *.log
 .idea/
 .vscode/
+.pytest_cache/
+*.egg-info/
