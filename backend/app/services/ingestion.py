@@ -6,6 +6,7 @@ from app.core.llm import embed_texts
 from app.core.milvus import get_milvus_client
 from app.models.entities import Document, Chunk
 from app.services.splitters import parse_and_split
+from app.services.retrieval import tokenize_cn
 
 UPLOAD_DIR = Path("storage/uploads")
 
@@ -37,7 +38,8 @@ def ingest_bytes(db: Session, filename: str, data: bytes, source_type: str) -> D
                          "content": c["content"][:8000], "embedding": emb})
             chunk_rows.append(Chunk(id=uuid.UUID(cid), document_id=doc.id, chunk_index=i,
                                     content=c["content"], heading=c["heading"],
-                                    page=c["metadata"].get("page"), metadata_=c["metadata"]))
+                                    page=c["metadata"].get("page"), metadata_=c["metadata"],
+                                    search_text=tokenize_cn(c["content"])))
         get_milvus_client().upsert_chunks(rows)
         db.add_all(chunk_rows)
         doc.status = "ready"

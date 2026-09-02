@@ -11,3 +11,5 @@ dist/
 *.egg-info/
 backend/storage/
 *.tsbuildinfo
+
+.superpowers/

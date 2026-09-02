@@ -16,5 +16,6 @@ class AgentState(TypedDict, total=False):
     answer: str
     citations: list[dict]
     verify_count: int
+    verify_retrieve: bool
     trace: list[TraceStep]
     route: str

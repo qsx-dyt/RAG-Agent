@@ -38,16 +38,21 @@ def keyword_search(query: str, top_k: int, filters: dict | None = None) -> list[
             """
             rows = db.execute(text(sql), params).mappings().all()
             return [dict(r) for r in rows]
+        words = [w for w in jieba.cut(query) if w.strip()]
+        if not words:
+            return []
+        # OR 语义:任一中文词命中即召回,ts_rank 按命中度排序(与向量检索互补)
+        tsq = " | ".join('"%s"' % w for w in words)
         sql = """
             SELECT c.id AS chunk_id, c.document_id, c.content,
-                   ts_rank(to_tsvector('simple', c.content),
-                           plainto_tsquery('simple', :q)) AS score
+                   ts_rank(to_tsvector('simple', c.search_text),
+                           to_tsquery('simple', :q)) AS score
             FROM chunks c
-            WHERE to_tsvector('simple', c.content) @@ plainto_tsquery('simple', :q)
+            WHERE to_tsvector('simple', c.search_text) @@ to_tsquery('simple', :q)
             ORDER BY score DESC
             LIMIT :limit
         """
-        rows = db.execute(text(sql), {"q": q, "limit": top_k}).mappings().all()
+        rows = db.execute(text(sql), {"q": tsq, "limit": top_k}).mappings().all()
         return [dict(r) for r in rows]
     finally:
         db.close()
@@ -62,18 +67,26 @@ def vector_search(query: str, top_k: int, filters: dict | None = None) -> list[d
     return get_milvus_client().search(vec, top_k=top_k, expr=expr)
 
 
+def _carry(target: dict, hit: dict) -> None:
+    for field in ("document_id", "content"):
+        if target.get(field) is None and hit.get(field):
+            target[field] = hit[field]
+
+
 def rrf_fuse(vec_hits: list[dict], kw_hits: list[dict], k: int = 60) -> list[dict]:
     score_map: dict[str, dict] = {}
     for rank, hit in enumerate(vec_hits):
         key = hit["chunk_id"]
-        score_map.setdefault(key, {"chunk_id": key, "score": 0.0, "sources": set()})
-        score_map[key]["score"] += 1.0 / (k + rank + 1)
-        score_map[key]["sources"].add("vector")
+        item = score_map.setdefault(key, {"chunk_id": key, "score": 0.0, "sources": set()})
+        item["score"] += 1.0 / (k + rank + 1)
+        item["sources"].add("vector")
+        _carry(item, hit)
     for rank, hit in enumerate(kw_hits):
         key = hit["chunk_id"]
-        score_map.setdefault(key, {"chunk_id": key, "score": 0.0, "sources": set()})
-        score_map[key]["score"] += 1.0 / (k + rank + 1)
-        score_map[key]["sources"].add("keyword")
+        item = score_map.setdefault(key, {"chunk_id": key, "score": 0.0, "sources": set()})
+        item["score"] += 1.0 / (k + rank + 1)
+        item["sources"].add("keyword")
+        _carry(item, hit)
     fused = sorted(score_map.values(), key=lambda x: x["score"], reverse=True)
     for item in fused:
         item["sources"] = sorted(item["sources"])
@@ -88,3 +101,4 @@ def hybrid_search(query: str, top_k: int, filters: dict | None = None) -> list[d
         return keyword_search(query, top_k, filters)
     kw = keyword_search(query, top_k * 2, filters)
     return rrf_fuse(vec, kw)[:top_k]
+

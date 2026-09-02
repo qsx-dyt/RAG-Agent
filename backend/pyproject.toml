@@ -11,6 +11,7 @@ dependencies = [
     "pymilvus>=2.4",
     "langchain>=0.3",
     "langchain-openai>=0.2",
+    "langchain-text-splitters>=0.3",
     "langgraph>=0.2",
     "pypdf>=5.0",
     "pdfplumber>=0.11",
@@ -26,3 +27,5 @@ dev = [
     "pytest-asyncio>=0.24",
     "ragas>=0.2",
 ]
+
+

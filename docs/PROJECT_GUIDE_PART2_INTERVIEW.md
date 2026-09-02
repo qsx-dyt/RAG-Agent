@@ -14,14 +14,14 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ 前端 React SPA(AntD)                                        │
-│  聊天页:消息流 + 引用卡片 + Agent Trace 面板                  │
+│  聊天页:会话管理(新建/重命名/删除/历史) + 消息流 + Trace   │
 │  文档管理页:拖拽上传 + 状态表格                               │
 └──────────────────────────┬──────────────────────────────────┘
                            │ HTTP + SSE(流式)
 ┌──────────────────────────▼──────────────────────────────────┐
 │ FastAPI API 层(/api/v1)                                     │
 │  documents: 上传/列表/详情/删除/切片                         │
-│  conversations: 会话 CRUD                                    │
+│  conversations: 会话 CRUD(含重命名/删除/历史消息)            │
 │  chat: SSE 流式问答                                          │
 └──────────────────────────┬──────────────────────────────────┘
 ┌──────────────────────────▼──────────────────────────────────┐
@@ -76,7 +76,7 @@ RRF_score(d) = Σ 1 / (k + rank_i)   # k=60
 
 **可能被追问**:
 - Q: 为什么不用加权平均融合?→ 两个检索器的分数尺度不同(余弦相似度 vs ts_rank),直接加权需要调优且不稳定;RRF 只用排名,天然免疫尺度差异。
-- Q: jieba 分词在 FTS 里怎么用的?→ 查询和入库时用 jieba 预分词成空格连接,PG 用 `to_tsvector('simple')` 存储与匹配,避免默认英文分词器对中文失效。
+- Q: jieba 分词在 FTS 里怎么用的?→ 入库时额外生成 `search_text` 列(切片内容经 jieba 分词、空格连接),PG 用 `to_tsvector('simple')` 建索引;查询同样 jieba 分词后用 `to_tsquery('simple')` 做 OR 语义召回、`ts_rank` 排序。既避免默认英文分词器对中文失效,又保证长问句的关键词召回率。
 
 ### 难点 2:Agent 编排(LangGraph 状态图)
 - **问题**:简单的"检索→生成"做不好三类问题:① 多轮对话指代("那审批要几天?");② 需要工具/统计的问题("库里几份文档?");③ 回答质量没有保障。
@@ -114,13 +114,13 @@ rewrite(查询改写)→ router(意图路由)→ retrieve(检索)/ tools(工具�
 - **测试**:pytest 覆盖切片/RRF/Agent 编译/API(mock Milvus 与 embedding);前端 vitest 测 SSE 解析与上传组件。
 - **配置**:全部环境变量注入,`.env.example` 零密钥;embedding 维度可配置。
 - **部署**:Docker Compose 一键编排 6 个服务;前后端分离,nginx 反代。
-- **健壮性**:LLM 超时/重试、Milvus 降级、文档级失败隔离、流式中断处理。
+- **健壮性**:LLM 超时/重试与配额(429)优雅降级——rewrite/router/verify 失败自动回退,generate 失败输出检索片段兜底;向量检索失败自动降级为关键词检索;文档级失败隔离;SSE 流始终完整结束、引用正常落库。
 
 ## 5. 数据模型(背下来)
 
 ```sql
 documents     -- 文档元数据(id/title/source_type/status/checksum/metadata)
-chunks        -- 切片(id/document_id/content/heading/page/metadata)
+chunks        -- 切片(id/document_id/content/heading/page/search_text/metadata)
 conversations -- 会话
 messages      -- 消息(role/content)
 citations     -- 引用(message_id/chunk_id/document_id/score/snippet)
@@ -154,7 +154,7 @@ citations     -- 引用(message_id/chunk_id/document_id/score/snippet)
 答:rewrite 节点把"那审批要几天?"结合历史改写为"差旅费报销的审批流程需要几天?",变成自包含查询再检索。
 
 **Q7: 遇到哪些坑?怎么解决的?**
-答:① 中文分词:PG 默认分词器对中文无效,用 jieba 预分词;② embedding 维度不匹配:模型换了维度就得改配置并重建集合;③ 第三方库 pymilvus 导入时会把根目录 .env 注入环境变量污染测试,在 conftest 里做了隔离;④ sqlite 无 FTS,为本地测试加了 LIKE 降级实现。
+答:① 中文分词:PG 默认分词器对中文无效,用 jieba 预分词并落 `search_text` 列,`to_tsquery` OR 语义保证长问句召回;② embedding 维度不匹配:模型换了维度就得改配置并重建集合;③ 第三方库 pymilvus 导入时会把根目录 .env 注入环境变量污染测试,在 conftest 里做了隔离;④ sqlite 无 FTS,为本地测试加了 LIKE 降级实现;⑤ Docker 部署还踩过几个真实的坑:etcd 默认只监听 localhost 导致 Milvus 连不上、`langchain-text-splitters` 依赖缺失、SQLAlchemy `metadata` 字段被内置 MetaData 遮蔽、PostgreSQL 返回的 UUID 不能直接 JSON 序列化、verify 循环条件写反导致死循环、前端缺 QueryClientProvider 导致白屏——都已修复并有测试覆盖。
 
 **Q8: 性能怎么样?**
 答:写入流按文档批量 embedding、Milvus 批量 upsert;问答流 top_k 双路召回(各 10 条)RRF 融合后截断,LLM 生成流式返回,首 token 延迟由 LLM 决定;Agent 全链路含多次 LLM 调用,属于"质量优先"的设计,可用配置收紧(如关闭自检)。
@@ -170,7 +170,8 @@ citations     -- 引用(message_id/chunk_id/document_id/score/snippet)
 - 混合检索:Milvus 向量 + PostgreSQL FTS(jieba)双路召回,RRF 融合,向量故障自动降级
 - LangGraph Agent 编排:查询改写、意图路由、工具调用(文档统计/过滤检索)、回答自检回退(≤1 次)
 - RAGAS 质量评估:faithfulness / answer_relevancy / context_precision,内置 12 条评估集
-- 工程化:Docker Compose 一键部署 6 服务;pytest/vitest 测试;环境变量配置,零硬编码密钥
+- 会话管理:会话新建/重命名/删除、历史消息回看,引用随消息持久化
+- 工程化:Docker Compose 一键部署 6 服务(健康检查自动等待依赖);pytest/vitest 测试;环境变量配置,零硬编码密钥
 ```
 
 ---

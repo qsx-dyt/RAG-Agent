@@ -7,6 +7,8 @@
 - **混合检索**:Milvus 向量检索 + PostgreSQL FTS(jieba 分词)双路召回,RRF 融合,支持元数据过滤与 Milvus 故障降级。
 - **Agent 编排**:LangGraph 状态图(rewrite → router → retrieve/tool → generate → verify),多轮查询改写、意图路由、工具调用、回答自检补检。
 - **引用溯源**:回答带 [1][2] 编号引用,前端可点击回看原文片段。
+- **会话管理**:会话新建/重命名/删除、历史消息回看,引用随消息持久化。
+- **健壮降级**:LLM/Embedding 失败或配额不足(如免费 API 429)时,Agent 自动降级——生成阶段回退为检索片段兜底、向量检索退化为关键词检索,SSE 流始终完整结束。
 - **RAG 评估**:RAGAS 脚本量化 faithfulness / answer_relevancy / context_precision。
 - **全栈工程**:FastAPI + React(Ant Design)+ Docker Compose 一键启动,环境变量配置。
 
@@ -27,10 +29,10 @@
 cp .env.example .env
 # 编辑 .env,填入 OPENAI_API_KEY / OPENAI_BASE_URL / LLM_MODEL 与 Embedding 配置
 
-# 2. 一键启动全部服务
+# 2. 一键启动全部服务(已内置健康检查,自动等待 postgres/milvus 就绪)
 docker compose up --build
 
-# 3. 导入内置样例文档(6 份 MD + 2 份 PDF)
+# 3. 导入内置样例文档(6 份 MD + 2 份 PDF;sample_data 已自动挂载进容器)
 docker compose exec api python -m scripts.seed_sample
 
 # 4. 打开前端
@@ -95,7 +97,9 @@ docker-compose.yml 一键编排
 ## 常见问题
 
 - **Embedding 维度不匹配**:首次启动时 Milvus 按 `EMBEDDING_DIM` 建集合,更换模型后需删掉集合重建(或清空 volume)。
-- **Milvus 首次启动慢**:standalone 模式首次拉起 etcd/minio/milvus 需要 1-2 分钟,`/api/v1/health` 就绪后再上传文档。
+- **Milvus 首次启动慢**:standalone 模式首次拉起 etcd/minio/milvus 需要 1-2 分钟;compose 健康检查已让 `api` 等待 Milvus 就绪后才启动,`/api/v1/health` 返回 `ok` 即可使用。
+- **免费 API 每日配额**:chatanywhere 等免费 key 对 LLM 与 Embedding 各有每日请求上限,超限返回 429。系统自动降级:回答退化为检索片段兜底、向量检索退化为关键词检索;次日 00:00 配额重置或换付费 key 后恢复完整效果。
+- **启动顺序**:compose 已内置健康检查与 `depends_on` 依赖等待,无需手动等待数据库就绪。
 - **中文 PDF 乱码**:样例 PDF 由 reportlab 生成,需系统含中文字体(Windows 自带微软雅黑;Linux 容器请安装 wqy 字体)。
 - **重排默认关闭**:`FlagEmbedding` 为可选依赖,启用 `RERANK_ENABLED=true` 时需自行安装。
 

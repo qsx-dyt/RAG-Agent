@@ -10,7 +10,7 @@ class DocumentOut(BaseModel):
     status: str
     page_count: int | None = None
     chunk_count: int = 0
-    metadata_: dict = Field(default_factory=dict, alias="metadata")
+    metadata_: dict = Field(default_factory=dict)
     created_at: datetime
 
     model_config = {"from_attributes": True, "populate_by_name": True}
@@ -24,3 +24,4 @@ class ChunkOut(BaseModel):
     page: int | None = None
 
     model_config = {"from_attributes": True}
+

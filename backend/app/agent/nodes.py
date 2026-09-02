@@ -64,11 +64,18 @@ def retrieve_node(state: AgentState) -> dict:
 def generate_node(state: AgentState) -> dict:
     t0 = time.time()
     q = state.get("rewritten_query") or state["query"]
-    context = "\n\n".join(f"[{i + 1}] {h.get('content', '')}" for i, h in enumerate(state.get("retrieved", [])))
-    answer = _llm_text(GENERATE_PROMPT.format(context=context or "（无检索结果）", query=q))
-    citations = [{"index": i + 1, "chunk_id": h.get("chunk_id"), "document_id": h.get("document_id"),
+    retrieved = state.get("retrieved", [])
+    context = "\n\n".join(f"[{i + 1}] {h.get('content', '')}" for i, h in enumerate(retrieved))
+    try:
+        answer = _llm_text(GENERATE_PROMPT.format(context=context or "（无检索结果）", query=q))
+    except Exception as exc:
+        answer = (f"【生成回答失败】LLM 调用出错（{type(exc).__name__}），以下为检索到的相关片段：\n\n"
+                  f"{context or '（无检索结果）'}")
+    citations = [{"index": i + 1,
+                  "chunk_id": str(h["chunk_id"]) if h.get("chunk_id") else None,
+                  "document_id": str(h["document_id"]) if h.get("document_id") else None,
                   "content": h.get("content", ""), "score": h.get("score")}
-                 for i, h in enumerate(state.get("retrieved", []))]
+                 for i, h in enumerate(retrieved)]
     out = _with_trace(state, "generate", "生成回答", t0)
     out["answer"] = answer
     out["citations"] = citations
@@ -80,9 +87,13 @@ def verify_node(state: AgentState) -> dict:
     if state.get("verify_count", 0) >= 1 or not state.get("retrieved"):
         return _with_trace(state, "verify", "无需补检", t0)
     context = "\n\n".join(h.get("content", "") for h in state.get("retrieved", []))
-    verdict = _llm_text(VERIFY_PROMPT.format(answer=state.get("answer", ""), context=context)).strip().lower()
+    try:
+        verdict = _llm_text(VERIFY_PROMPT.format(answer=state.get("answer", ""), context=context)).strip().lower()
+    except Exception:
+        verdict = "yes"
     if verdict.startswith("yes"):
         return _with_trace(state, "verify", "引用充分", t0)
     out = _with_trace(state, "verify", "引用不足,补检", t0)
+    out["verify_retrieve"] = True
     out["verify_count"] = state.get("verify_count", 0) + 1
     return out

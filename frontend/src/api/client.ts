@@ -22,6 +22,28 @@ export const createConversation = (title = "新会话") =>
     body: JSON.stringify({ title }),
   });
 
+export const getConversationMessages = (id: string) =>
+  apiFetch<Array<{ id: string; role: string; content: string; citations: CitationItem[] }>>(
+    `/conversations/${id}/messages`
+  );
+
+export const renameConversation = (id: string, title: string) =>
+  apiFetch<{ id: string; title: string }>(`/conversations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  });
+
+export const deleteConversation = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/conversations/${id}`, { method: "DELETE" });
+
+export interface CitationItem {
+  index: number;
+  chunk_id?: string;
+  document_id?: string;
+  content?: string;
+  score?: number;
+}
+
 export const listDocuments = () =>
   apiFetch<Array<Record<string, unknown>>>("/documents");
 

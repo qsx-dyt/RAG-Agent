@@ -10,7 +10,7 @@ def _route_after_router(state: AgentState) -> str:
 
 
 def _route_after_verify(state: AgentState) -> str:
-    if state.get("verify_count", 0) < 1 and state.get("retrieved"):
+    if state.get("verify_retrieve"):
         return "retrieve"
     return END
 

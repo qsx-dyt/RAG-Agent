@@ -47,7 +47,7 @@ class MilvusClient:
         res = self._raw_search(query_embedding, top_k, expr)
         out = []
         for hit in res[0]:
-            out.append({"id": hit.entity.get("id"), "document_id": hit.entity.get("document_id"),
+            out.append({"chunk_id": hit.entity.get("id"), "document_id": hit.entity.get("document_id"),
                         "content": hit.entity.get("content"), "score": hit.distance})
         return out
 
@@ -85,3 +85,4 @@ def get_milvus_client() -> MilvusClient:
         s = get_settings()
         _client = MilvusClient(host=s.milvus_host, port=s.milvus_port, dim=s.embedding_dim)
     return _client
+

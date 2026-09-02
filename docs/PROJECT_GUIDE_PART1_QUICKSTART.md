@@ -72,7 +72,7 @@ docker compose up --build
 
 这会依次启动 6 个容器:`postgres`(资料库)、`etcd`+`minio`+`milvus-standalone`(向量库三件套)、`api`(后端)、`web`(前端)。
 
-启动需要 1–3 分钟(Milvus 首次启动较慢)。看到 `api` 容器输出启动完成即可。
+启动需要 1–3 分钟(Milvus 首次启动较慢)。compose 已内置**健康检查**:`api` 会自动等待 `postgres`/`milvus` 就绪后才启动,`web` 等 `api` 就绪——你不需要手动等待或反复重启。
 
 ### 第 3 步:导入演示文档
 
@@ -80,7 +80,7 @@ docker compose up --build
 docker compose exec api python -m scripts.seed_sample
 ```
 
-把 `sample_data/` 里 8 份演示文档(6 份 Markdown + 2 份 PDF)解析并入库。看到每行 `xxx: ready` 就成功了。
+把 `sample_data/` 里 8 份演示文档(6 份 Markdown + 2 份 PDF)解析并入库(该目录已自动挂载进 api 容器,无需手动拷贝)。看到每行 `xxx: ready` 就成功了。
 
 ### 第 4 步:打开网页开始聊天
 
@@ -94,6 +94,7 @@ docker compose exec api python -m scripts.seed_sample
 ```
 
 回答会附上引用卡片;右侧面板能看到 AI 的"思考步骤"(Agent Trace)。
+- 左侧会话列表支持**会话管理**:点一下某个会话可回看历史问答;每个会话都有「重命名」和「删除」操作;点「新会话」开启新对话。
 
 ### 第 5 步:关掉
 
@@ -149,10 +150,13 @@ eval_dataset.json      # 评估用的问题集
 ## 7. 常见问题(FAQ)
 
 **Q: 报错 "no such table" 或连不上数据库?**
-A: 等 `postgres` 容器就绪再操作;`docker compose up` 后等 10 秒再执行 seed。
+A: 正常情况下不用管——compose 的健康检查已让 `api` 等 `postgres` 就绪后才启动。若仍报错,执行 `docker compose ps` 看 `postgres` 是否为 `healthy`,必要时 `docker compose up -d` 重启。
 
 **Q: 上传文档后状态一直是 failed?**
 A: 常见原因:1) `EMBEDDING_DIM` 与模型不符;2) API Key 失效或配额用完(免费 key 通常有每日次数限制);3) 文件不是 PDF/MD。
+
+**Q: 为什么回答变成了"【生成回答失败】..."?**
+A: LLM 的每日免费配额用完了(返回 429)。系统会自动降级:把检索到的原文片段作为兜底回答展示,保证对话不中断。次日 00:00 配额重置,或换付费 key 后恢复正常回答。
 
 **Q: 为什么回答"知识库中未找到相关信息"?**
 A: 检索没找到相关片段。可能文档没导入成功,或问题与文档内容无关。这是系统诚实的表现——不会瞎编。
