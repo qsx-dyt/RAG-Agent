@@ -105,10 +105,11 @@ docker-compose.yml 一键编排
 
 ## 帮助文档
 
-- 快速上手(小白版): `docs/PROJECT_GUIDE_PART1_QUICKSTART.md`
+- 项目深度解析与技术快速上手: `docs/PROJECT_GUIDE_PART1_QUICKSTART.md`
 - 面试项目解析: `docs/PROJECT_GUIDE_PART2_INTERVIEW.md`
 
 ## 设计文档
 
 - 设计: `docs/superpowers/specs/2026-09-01-enterprise-rag-agent-design.md`
 - 实现计划: `docs/superpowers/plans/2026-09-01-enterprise-rag-agent.md`
+
