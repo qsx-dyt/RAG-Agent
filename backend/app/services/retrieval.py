@@ -1,3 +1,8 @@
+"""此文件实现检索服务：分词、基于关键字的检索、基于向量的检索，以及两者的混合（RRF 融合）。
+面向中文文本（使用 jieba 分词）、关系型数据库存储文本块（chunks 表），
+向量检索使用 Milvus，向量由 app.core.llm.embed_texts 生成。
+先尝试向量检索，若抛异常则打印 warning 并回退到 keyword_search。"""
+
 import jieba
 from typing import Any
 from sqlalchemy import text

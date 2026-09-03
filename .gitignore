@@ -11,5 +11,5 @@ dist/
 *.egg-info/
 backend/storage/
 *.tsbuildinfo
-
+/test.py
 .superpowers/
